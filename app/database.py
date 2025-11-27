@@ -1,18 +1,25 @@
-from supabase import create_client, Client
+from postgrest import SyncPostgrestClient
 from app.config import get_settings
 
 settings = get_settings()
 
-def get_supabase_client() -> Client:
+def get_database_client() -> SyncPostgrestClient:
     """
-    Supabase client banata hai
-    Ek baar connect karo, baar baar use karo
+    PostgREST client banata hai - Direct Supabase REST API use karta hai
     """
-    supabase: Client = create_client(
-        settings.supabase_url,
-        settings.supabase_key
+    # Supabase REST endpoint
+    rest_url = f"{settings.supabase_url}/rest/v1"
+    
+    client = SyncPostgrestClient(
+        base_url=rest_url,
+        headers={
+            "apikey": settings.supabase_key,
+            "Authorization": f"Bearer {settings.supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
     )
-    return supabase
+    return client
 
-# Global client - poore app mein use hoga
-supabase_client = get_supabase_client()
+# Global client
+db_client = get_database_client()

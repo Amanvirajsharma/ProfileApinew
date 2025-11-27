@@ -1,4 +1,4 @@
-from app.database import supabase_client
+from app.database import db_client
 from app.models import ProfileCreate, ProfileUpdate
 from typing import Optional
 from uuid import UUID
@@ -6,10 +6,11 @@ from uuid import UUID
 class ProfileService:
     """
     Profile ke saare database operations yahan hai
+    PostgREST client use kar raha hai
     """
     
     def __init__(self):
-        self.client = supabase_client
+        self.client = db_client
         self.table = "profiles"
     
     # ============ CREATE ============
@@ -20,12 +21,12 @@ class ProfileService:
         # Pydantic model ko dictionary mein convert karo
         data = profile_data.model_dump(exclude_none=True)
         
-        # Date ko string mein convert karo (Supabase ke liye)
+        # Date ko string mein convert karo
         if 'date_of_birth' in data and data['date_of_birth']:
             data['date_of_birth'] = str(data['date_of_birth'])
         
         # Database mein insert karo
-        response = self.client.table(self.table).insert(data).execute()
+        response = self.client.from_(self.table).insert(data).execute()
         
         return response.data[0] if response.data else None
     
@@ -34,7 +35,7 @@ class ProfileService:
         """
         ID se profile dhundta hai
         """
-        response = self.client.table(self.table)\
+        response = self.client.from_(self.table)\
             .select("*")\
             .eq("id", str(profile_id))\
             .execute()
@@ -45,7 +46,7 @@ class ProfileService:
         """
         Email se profile dhundta hai
         """
-        response = self.client.table(self.table)\
+        response = self.client.from_(self.table)\
             .select("*")\
             .eq("email", email)\
             .execute()
@@ -66,8 +67,8 @@ class ProfileService:
         # Offset calculate karo
         offset = (page - 1) * limit
         
-        # Query banao
-        query = self.client.table(self.table).select("*", count="exact")
+        # Base query
+        query = self.client.from_(self.table).select("*", count="exact")
         
         # Filter lagao agar chahiye
         if is_active is not None:
@@ -79,7 +80,7 @@ class ProfileService:
             .range(offset, offset + limit - 1)\
             .execute()
         
-        total = response.count if response.count else 0
+        total = response.count if response.count else len(response.data)
         return response.data, total
     
     # ============ UPDATE ============
@@ -99,7 +100,7 @@ class ProfileService:
             data['date_of_birth'] = str(data['date_of_birth'])
         
         # Update karo
-        response = self.client.table(self.table)\
+        response = self.client.from_(self.table)\
             .update(data)\
             .eq("id", str(profile_id))\
             .execute()
@@ -111,7 +112,7 @@ class ProfileService:
         """
         Profile delete karta hai
         """
-        response = self.client.table(self.table)\
+        response = self.client.from_(self.table)\
             .delete()\
             .eq("id", str(profile_id))\
             .execute()
@@ -123,7 +124,8 @@ class ProfileService:
         """
         Name ya email se search karta hai
         """
-        response = self.client.table(self.table)\
+        # PostgREST mein ilike search
+        response = self.client.from_(self.table)\
             .select("*")\
             .or_(f"full_name.ilike.%{search_term}%,email.ilike.%{search_term}%")\
             .limit(limit)\
@@ -132,5 +134,5 @@ class ProfileService:
         return response.data
 
 
-# Singleton instance - poore app mein ek hi use hoga
+# Singleton instance
 profile_service = ProfileService()
