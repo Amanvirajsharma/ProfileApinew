@@ -1,13 +1,14 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import date, datetime
 from uuid import UUID
+import re
 
 
 # ============ REQUEST MODELS ============
 class ProfileCreate(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100, examples=["Rahul Sharma"])
-    email: EmailStr = Field(..., examples=["rahul@example.com"])
+    email: str = Field(..., examples=["rahul@example.com"])  # Changed from EmailStr
     phone: Optional[str] = Field(None, max_length=15, examples=["9876543210"])
     bio: Optional[str] = Field(None, examples=["Software Developer"])
     avatar_url: Optional[str] = Field(None, examples=["https://example.com/avatar.jpg"])
@@ -16,6 +17,15 @@ class ProfileCreate(BaseModel):
     address: Optional[str] = Field(None, examples=["123, MG Road"])
     city: Optional[str] = Field(None, examples=["Mumbai"])
     country: Optional[str] = Field(None, examples=["India"])
+    
+    # Email validation manually
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_regex, v):
+            raise ValueError('Invalid email format')
+        return v.lower()  # Store email in lowercase
 
 
 class ProfileUpdate(BaseModel):
