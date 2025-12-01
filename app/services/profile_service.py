@@ -1,5 +1,5 @@
 from app.database import db_client
-from app.models import ProfileCreate, ProfileUpdate
+from app.models import ProfileCreate, ProfileUpdate, RoleEnum
 from typing import Optional
 from uuid import UUID
 
@@ -18,6 +18,10 @@ class ProfileService:
         # Convert date to string
         if 'date_of_birth' in data and data['date_of_birth']:
             data['date_of_birth'] = str(data['date_of_birth'])
+        
+        # Convert enum to string
+        if 'role' in data:
+            data['role'] = data['role'].value if hasattr(data['role'], 'value') else data['role']
         
         response = self.client.from_(self.table).insert(data).execute()
         return response.data[0] if response.data else None
@@ -44,15 +48,21 @@ class ProfileService:
         self, 
         page: int = 1, 
         limit: int = 10,
-        is_active: Optional[bool] = None
+        is_active: Optional[bool] = None,
+        role: Optional[str] = None  # NEW PARAMETER
     ) -> tuple[list, int]:
-        """Get all profiles with pagination"""
+        """Get all profiles with pagination and filters"""
         offset = (page - 1) * limit
         
         query = self.client.from_(self.table).select("*", count="exact")
         
+        # Filter by active status
         if is_active is not None:
             query = query.eq("is_active", is_active)
+        
+        # Filter by role - NEW
+        if role is not None:
+            query = query.eq("role", role)
         
         response = query\
             .order("created_at", desc=True)\
@@ -69,8 +79,13 @@ class ProfileService:
         if not data:
             return self.get_profile_by_id(profile_id)
         
+        # Convert date
         if 'date_of_birth' in data and data['date_of_birth']:
             data['date_of_birth'] = str(data['date_of_birth'])
+        
+        # Convert enum to string - NEW
+        if 'role' in data:
+            data['role'] = data['role'].value if hasattr(data['role'], 'value') else data['role']
         
         response = self.client.from_(self.table)\
             .update(data)\
@@ -88,15 +103,56 @@ class ProfileService:
         
         return len(response.data) > 0
     
-    def search_profiles(self, search_term: str, limit: int = 10) -> list:
+    def search_profiles(
+        self, 
+        search_term: str, 
+        limit: int = 10,
+        role: Optional[str] = None  # NEW PARAMETER
+    ) -> list:
         """Search profiles by name or email"""
-        response = self.client.from_(self.table)\
+        query = self.client.from_(self.table)\
             .select("*")\
-            .or_(f"full_name.ilike.%{search_term}%,email.ilike.%{search_term}%")\
-            .limit(limit)\
+            .or_(f"full_name.ilike.%{search_term}%,email.ilike.%{search_term}%")
+        
+        # Filter by role - NEW
+        if role is not None:
+            query = query.eq("role", role)
+        
+        response = query.limit(limit).execute()
+        return response.data
+    
+    # ============ NEW METHODS ============
+    
+    def get_users(self, page: int = 1, limit: int = 10) -> tuple[list, int]:
+        """Get only users (role = 'user')"""
+        return self.get_all_profiles(page, limit, role="user")
+    
+    def get_institutions(self, page: int = 1, limit: int = 10) -> tuple[list, int]:
+        """Get only institutions (role = 'institution')"""
+        return self.get_all_profiles(page, limit, role="institution")
+    
+    def get_role_stats(self) -> dict:
+        """Get count of users and institutions"""
+        # Get users count
+        users_response = self.client.from_(self.table)\
+            .select("id", count="exact")\
+            .eq("role", "user")\
             .execute()
         
-        return response.data
+        # Get institutions count
+        institutions_response = self.client.from_(self.table)\
+            .select("id", count="exact")\
+            .eq("role", "institution")\
+            .execute()
+        
+        users_count = users_response.count if users_response.count else 0
+        institutions_count = institutions_response.count if institutions_response.count else 0
+        
+        return {
+            "total_users": users_count,
+            "total_institutions": institutions_count,
+            "total_profiles": users_count + institutions_count
+        }
 
 
 # Singleton instance
